@@ -82,7 +82,13 @@ app.get("/messages", async (req, res) => {
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        const AllMessages = await db.collection("messages").find({}).toArray()
+        const AllMessages = await db.collection("messages").find({$or:[
+            {type:'status'},
+            {type:'message'},
+            {$and:[{type:'private_message'},
+        {$or:[{to:req.headers.user},{from:req.headers.user}]}]}
+        ]})
+            .toArray()
 
         if (!limit || limit >= AllMessages.length) {
             messagesToSend = AllMessages
