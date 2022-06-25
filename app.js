@@ -82,12 +82,13 @@ app.get("/messages", async (req, res) => {
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        const AllMessages = await db.collection("messagens").find({}).toArray()
+        const AllMessages = await db.collection("messages").find({}).toArray()
 
-        if (limit) {
-            messagesToSend = AllMessages.slice(limit, (AllMessages.length - 1))
-        } else {
+        if (!limit || limit >= AllMessages.length) {
             messagesToSend = AllMessages
+        } else {
+            let lastMessage = (AllMessages.length - 1)
+            messagesToSend = AllMessages.slice((lastMessage - limit), lastMessage)
         }
         res.send(messagesToSend);
         //mongoClient.close();
@@ -98,7 +99,7 @@ app.get("/messages", async (req, res) => {
 });
 
 
-app.post("/status", (req,res) => { 
+app.post("/status", (req, res) => {
     res.send("OK")
 })
 
