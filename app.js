@@ -6,7 +6,6 @@ import dotenv from 'dotenv';
 
 dotenv.config();
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
@@ -20,17 +19,17 @@ app.post("/participants", async (req, res) => {
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        db.collection("participants").insertOne({
+        await db.collection("participants").insertOne({
             name: req.body.name,
             lastStatus: Date.now()
         });
 
-        db.collection("messages").insertOne({
+        await db.collection("messages").insertOne({
             from: req.body.name,
             to: 'Todos',
             text: 'entra na sala...',
             type: 'status',
-            time: dayjs(new Date(), 'HH:mm:ss')
+            time: dayjs(new Date()).format('HH:mm:ss')
         });
         res.sendStatus(201);
         //mongoClient.close();
@@ -60,7 +59,7 @@ app.post("/messages", async (req, res) => {
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        db.collection("messages").insertOne({
+        await db.collection("messages").insertOne({
             from: req.header.user,
             to: req.body.to,
             text: req.body.text,
