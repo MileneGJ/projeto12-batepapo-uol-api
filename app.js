@@ -32,10 +32,10 @@ app.post("/participants", async (req, res) => {
             time: dayjs(new Date()).format('HH:mm:ss')
         });
         res.sendStatus(201);
-        //mongoClient.close();
+        mongoClient.close();
     } catch {
         res.sendStatus(500);
-        //mongoClient.close();
+        mongoClient.close();
     }
 });
 
@@ -45,10 +45,10 @@ app.get("/participants", async (_, res) => {
         db = mongoClient.db("projeto12Database");
         const AllUsers = await db.collection("participants").find({}).toArray()
         res.send(AllUsers);
-        //mongoClient.close();
+        mongoClient.close();
     } catch {
         res.sendStatus(500);
-        //mongoClient.close();
+        mongoClient.close();
     }
 });
 
@@ -60,17 +60,17 @@ app.post("/messages", async (req, res) => {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
         await db.collection("messages").insertOne({
-            from: req.header.user,
+            from: req.headers.user,
             to: req.body.to,
             text: req.body.text,
             type: req.body.type,
             time: dayjs(new Date()).format('HH:mm:ss')
         });
         res.sendStatus(201);
-        //mongoClient.close();
+        mongoClient.close();
     } catch {
         res.sendStatus(500);
-        //mongoClient.close();
+        mongoClient.close();
     }
 });
 
@@ -87,20 +87,37 @@ app.get("/messages", async (req, res) => {
         if (!limit || limit >= AllMessages.length) {
             messagesToSend = AllMessages
         } else {
-            let lastMessage = (AllMessages.length - 1)
-            messagesToSend = AllMessages.slice((lastMessage - limit), lastMessage)
+            messagesToSend = AllMessages.slice(limit*(-1))
         }
         res.send(messagesToSend);
-        //mongoClient.close();
+        mongoClient.close();
     } catch {
         res.sendStatus(500);
-        //mongoClient.close();
+        mongoClient.close();
     }
 });
 
 
-app.post("/status", (req, res) => {
-    res.send("OK")
+app.post("/status", async (req, res) => {
+    try {
+		await mongoClient.connect();
+		db = mongoClient.db("projeto12Database");
+		const participant = await db.collection("participants").findOne({ name: req.headers.user })
+        console.log(participant)
+        if (!participant) {
+			res.sendStatus(404)
+			mongoClient.close()
+			return;
+		}
+		await db.collection("participants").updateOne({ 
+			_id: participant._id
+		}, { $set: {lastStatus:Date.now()} })
+		res.sendStatus(200)
+		mongoClient.close()
+	 } catch (error) {
+	  res.sendStatus(500)
+		mongoClient.close()
+	 }
 })
 
 app.listen(5000);
