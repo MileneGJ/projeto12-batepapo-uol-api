@@ -64,7 +64,7 @@ app.post("/messages", async (req, res) => {
             to: req.body.to,
             text: req.body.text,
             type: req.body.type,
-            time: dayjs(new Date(), 'HH:mm:ss')
+            time: dayjs(new Date()).format('HH:mm:ss')
         });
         res.sendStatus(201);
         //mongoClient.close();
