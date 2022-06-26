@@ -3,6 +3,7 @@ import cors from 'cors';
 import dayjs from "dayjs";
 import { MongoClient } from "mongodb";
 import dotenv from 'dotenv';
+import joi from 'joi'
 
 dotenv.config();
 const app = express();
@@ -12,15 +13,23 @@ app.use(express.json());
 const mongoClient = new MongoClient(process.env.MONGO_URL);
 let db
 
+const ParicipantSchema = joi.object({
+    name:joi.string().min(1).required()
+});
+
 app.post("/participants", async (req, res) => {
 
-    //Code for Validation//
+    const validation = ParicipantSchema.validate(req.body)
+    if(validation.error) {
+        res.sendStatus(422);
+        return
+    }
 
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        const participant = await db.collection("participants").findOne({name:req.body.name})
-        if(participant){
+        const participant = await db.collection("participants").findOne({ name: req.body.name })
+        if (participant) {
             res.sendStatus(409);
             mongoClient.close()
             return;
@@ -139,18 +148,16 @@ setInterval(async () => {
     await mongoClient.connect();
     db = mongoClient.db("projeto12Database");
     const participant = await db.collection("participants")
-        .findMany({ lastStatus: { $lt: Date.now() - 10 * 1000 } })
+        .findOne({ lastStatus: { $lt: Date.now() - 10 * 1000 } })
     if (participant) {
-        for (let i = 0; i < participant.length; i++) {
-            await db.collection("participants").deleteOne({ _id: participant[i]._id })
-            await db.collection("messages").insertOne({
-                from: participant[i].name,
-                to: 'Todos',
-                text: 'sai da sala...',
-                type: 'status',
-                time: dayjs(new Date()).format('HH:mm:ss')
-            })
-        }
+        await db.collection("participants").deleteOne({ _id: participant._id })
+        await db.collection("messages").insertOne({
+            from: participant.name,
+            to: 'Todos',
+            text: 'sai da sala...',
+            type: 'status',
+            time: dayjs(new Date()).format('HH:mm:ss')
+        })
     }
 }, 15000)
 
