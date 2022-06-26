@@ -13,20 +13,13 @@ app.use(express.json());
 const mongoClient = new MongoClient(process.env.MONGO_URL);
 let db
 
-const ParticipantSchema = joi.object({
-    name:joi.string().min(1).required()
-});
-const MessageSchema = joi.object({
-    to:joi.string().min(1).required(),
-    text:joi.string().min(1).required(),
-    type:joi.string().allow('message','private_message').required(),
-})
-let UserSchema
-
 app.post("/participants", async (req, res) => {
 
+    const ParticipantSchema = joi.object({
+        name: joi.string().min(1).required()
+    });
     const validation = ParticipantSchema.validate(req.body)
-    if(validation.error) {
+    if (validation.error) {
         res.sendStatus(422);
         return
     }
@@ -60,17 +53,12 @@ app.post("/participants", async (req, res) => {
     }
 });
 
-app.get("/participants", async (_, res) => {
+app.get("/participants", async (req, res) => {
     let AllUsers
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
         AllUsers = await db.collection("participants").find().toArray();
-
-        UserSchema = joi.object({
-            user:joi.string().allow(AllUsers).required()
-        })
-
         res.send(AllUsers);
         mongoClient.close();
     } catch {
@@ -81,9 +69,14 @@ app.get("/participants", async (_, res) => {
 
 app.post("/messages", async (req, res) => {
 
+    const MessageSchema = joi.object({
+        to: joi.string().min(1).required(),
+        text: joi.string().min(1).required(),
+        type: joi.string().valid('message', 'private_message').required(),
+    })
     let validation = MessageSchema.validate(req.body)
-    let validationUser = UserSchema.validate(req.headers)
-    if(validation.error||validationUser.error){
+    if (validation.error) {
+        console.log(validation.error)
         res.sendStatus(422);
         return
     }
@@ -91,6 +84,19 @@ app.post("/messages", async (req, res) => {
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
+        let AllUsers = await db.collection("participants").find().toArray();
+        AllUsers = AllUsers.map(user=>user.name);
+        let ArrayUsers = new Array(...AllUsers)
+        let UserSchema = joi.object({
+            user:joi.string().valid(...ArrayUsers).required()
+        })
+        let validationUser = UserSchema.validate({user:req.headers.user});
+        if(validationUser.error){
+            console.log(validationUser.error)
+            res.sendStatus(422);
+            return
+        }
+
         await db.collection("messages").insertOne({
             from: req.headers.user,
             to: req.body.to,
@@ -100,6 +106,7 @@ app.post("/messages", async (req, res) => {
         });
         res.sendStatus(201);
         mongoClient.close();
+
     } catch {
         res.sendStatus(500);
         mongoClient.close();
@@ -117,15 +124,14 @@ app.get("/messages", async (req, res) => {
         db = mongoClient.db("projeto12Database");
         AllMessages = await db.collection("messages").find({
             $or: [
-                { type: 'status' },
+                { to: 'Todos' },
                 { type: 'message' },
                 {
                     $and: [{ type: 'private_message' },
                     { $or: [{ to: req.headers.user }, { from: req.headers.user }] }]
                 }
             ]
-        })
-            .toArray()
+        }).toArray()
 
         if (!limit || limit >= AllMessages.length) {
             messagesToSend = AllMessages
