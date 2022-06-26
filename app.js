@@ -1,7 +1,7 @@
 import express from "express";
 import cors from 'cors';
 import dayjs from "dayjs";
-import { MongoClient } from "mongodb";
+import { MongoClient, ObjectId } from "mongodb";
 import dotenv from 'dotenv';
 import joi from 'joi'
 
@@ -23,14 +23,13 @@ app.post("/participants", async (req, res) => {
         res.sendStatus(422);
         return
     }
-
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
         const participant = await db.collection("participants").findOne({ name: req.body.name })
         if (participant) {
-            res.sendStatus(409);
             mongoClient.close()
+            res.sendStatus(409);
             return;
         }
         await db.collection("participants").insertOne({
@@ -45,25 +44,25 @@ app.post("/participants", async (req, res) => {
             type: 'status',
             time: dayjs(new Date()).format('HH:mm:ss')
         });
+        mongoClient.close();
         res.sendStatus(201);
-        mongoClient.close();
     } catch {
-        res.sendStatus(500);
         mongoClient.close();
+        res.sendStatus(500);
     }
 });
 
-app.get("/participants", async (req, res) => {
+app.get("/participants", async (_, res) => {
     let AllUsers
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
         AllUsers = await db.collection("participants").find().toArray();
+        mongoClient.close();
         res.send(AllUsers);
-        mongoClient.close();
     } catch {
-        res.sendStatus(500);
         mongoClient.close();
+        res.sendStatus(500);
     }
 });
 
@@ -76,7 +75,6 @@ app.post("/messages", async (req, res) => {
     })
     let validation = MessageSchema.validate(req.body)
     if (validation.error) {
-        console.log(validation.error)
         res.sendStatus(422);
         return
     }
@@ -84,15 +82,17 @@ app.post("/messages", async (req, res) => {
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
+
+        // Validação do usuário a ser inserido no 'from'
         let AllUsers = await db.collection("participants").find().toArray();
-        AllUsers = AllUsers.map(user=>user.name);
+        AllUsers = AllUsers.map(user => user.name);
         let ArrayUsers = new Array(...AllUsers)
         let UserSchema = joi.object({
-            user:joi.string().valid(...ArrayUsers).required()
+            user: joi.string().valid(...ArrayUsers).required()
         })
-        let validationUser = UserSchema.validate({user:req.headers.user});
-        if(validationUser.error){
-            console.log(validationUser.error)
+        let validationUser = UserSchema.validate({ user: req.headers.user });
+        if (validationUser.error) {
+            mongoClient.close();
             res.sendStatus(422);
             return
         }
@@ -104,20 +104,20 @@ app.post("/messages", async (req, res) => {
             type: req.body.type,
             time: dayjs(new Date()).format('HH:mm:ss')
         });
-        res.sendStatus(201);
         mongoClient.close();
+        res.sendStatus(201);
 
     } catch {
-        res.sendStatus(500);
         mongoClient.close();
+        res.sendStatus(500);
     }
 });
 
 
 app.get("/messages", async (req, res) => {
     let limit = parseInt(req.query.limit);
-    let messagesToSend
     let AllMessages
+    let messagesToSend
 
     try {
         await mongoClient.connect();
@@ -132,46 +132,49 @@ app.get("/messages", async (req, res) => {
                 }
             ]
         }).toArray()
-
         if (!limit || limit >= AllMessages.length) {
             messagesToSend = AllMessages
         } else {
             messagesToSend = AllMessages.slice(limit * (-1))
         }
+        mongoClient.close();
         res.send(messagesToSend);
-        mongoClient.close();
     } catch {
-        res.sendStatus(500);
         mongoClient.close();
+        res.sendStatus(500);
     }
 });
 
 
 app.post("/status", async (req, res) => {
+    let participant
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        const participant = await db.collection("participants").findOne({ name: req.headers.user })
+        participant = await db.collection("participants").findOne({ name: req.headers.user })
         if (!participant) {
-            res.sendStatus(404)
             mongoClient.close()
+            res.sendStatus(404)
             return;
         }
+        const participantID= new ObjectId(participant._id)
         await db.collection("participants").updateOne({
-            _id: participant._id
+            _id: participantID
         }, { $set: { lastStatus: Date.now() } })
+        mongoClient.close()
         res.sendStatus(200)
-        mongoClient.close()
     } catch (error) {
-        res.sendStatus(500)
         mongoClient.close()
+        res.sendStatus(500)
     }
 });
 
+//Remover usuário após inatividade de mais de 10 segundos
 setInterval(async () => {
+    let participant
     await mongoClient.connect();
     db = mongoClient.db("projeto12Database");
-    const participant = await db.collection("participants")
+    participant = await db.collection("participants")
         .findOne({ lastStatus: { $lt: Date.now() - 10 * 1000 } })
     if (participant) {
         await db.collection("participants").deleteOne({ _id: participant._id })
@@ -183,6 +186,34 @@ setInterval(async () => {
             time: dayjs(new Date()).format('HH:mm:ss')
         })
     }
+    mongoClient.close();
 }, 15000)
+
+app.delete("/messages/:messageId", async (req, res) => {
+    const messageId = new ObjectId(req.params.messageId)
+    let message
+    try {
+        await mongoClient.connect();
+        db = mongoClient.db("projeto12Database");
+        message = await db.collection("messages").findOne({ _id: messageId })
+        if (!message) {
+            mongoClient.close()
+            res.sendStatus(404);
+            return
+        }
+        if (message.from !== req.headers.user) {
+            mongoClient.close()
+            res.send(401);
+            return
+        }
+        await db.collection("messages").deleteOne({ _id: messageId })
+        mongoClient.close()
+        res.sendStatus(200)
+    } catch (error) {
+        mongoClient.close()
+        res.sendStatus(500)
+    }
+})
+
 
 app.listen(5000);
