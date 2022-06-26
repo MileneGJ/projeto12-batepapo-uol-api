@@ -13,13 +13,19 @@ app.use(express.json());
 const mongoClient = new MongoClient(process.env.MONGO_URL);
 let db
 
-const ParicipantSchema = joi.object({
+const ParticipantSchema = joi.object({
     name:joi.string().min(1).required()
 });
+const MessageSchema = joi.object({
+    to:joi.string().min(1).required(),
+    text:joi.string().min(1).required(),
+    type:joi.string().allow('message','private_message').required(),
+})
+let UserSchema
 
 app.post("/participants", async (req, res) => {
 
-    const validation = ParicipantSchema.validate(req.body)
+    const validation = ParticipantSchema.validate(req.body)
     if(validation.error) {
         res.sendStatus(422);
         return
@@ -55,10 +61,16 @@ app.post("/participants", async (req, res) => {
 });
 
 app.get("/participants", async (_, res) => {
+    let AllUsers
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        let AllUsers = await db.collection("participants").find().toArray()
+        AllUsers = await db.collection("participants").find().toArray();
+
+        UserSchema = joi.object({
+            user:joi.string().allow(AllUsers).required()
+        })
+
         res.send(AllUsers);
         mongoClient.close();
     } catch {
@@ -69,7 +81,12 @@ app.get("/participants", async (_, res) => {
 
 app.post("/messages", async (req, res) => {
 
-    //Code for Validation//
+    let validation = MessageSchema.validate(req.body)
+    let validationUser = UserSchema.validate(req.headers)
+    if(validation.error||validationUser.error){
+        res.sendStatus(422);
+        return
+    }
 
     try {
         await mongoClient.connect();
@@ -93,11 +110,12 @@ app.post("/messages", async (req, res) => {
 app.get("/messages", async (req, res) => {
     let limit = parseInt(req.query.limit);
     let messagesToSend
+    let AllMessages
 
     try {
         await mongoClient.connect();
         db = mongoClient.db("projeto12Database");
-        let AllMessages = await db.collection("messages").find({
+        AllMessages = await db.collection("messages").find({
             $or: [
                 { type: 'status' },
                 { type: 'message' },
